@@ -1,0 +1,171 @@
+C51 COMPILER V9.60.7.0   MAIN                                                              09/06/2025 12:39:12 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE Source\main.c OPTIMIZE(8,SPEED) BROWSE INCDIR(.\Source;.\Source;.\Source
+                    -\Buzzer;.\Source\CHRG;.\Source\KEY;.\Source\Timer;.\Source\IIC;.\Source\USER;.\Source\SYS;.\Source\UART;.\Source\LCD;.\S
+                    -ource\LED;.\Source\INC;.\Source\InfraRed;.\Source\ISP;.\Source\WS2811;.\Source\RF;.\Hardware\SN8F5702_Hardware\inc;.\Sou
+                    -rce\AHT10) DEBUG OBJECTEXTEND PRINT(.\Listings\main.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #define __XRAM_SFR_H__
+   2          #include "mcu.h"
+   3          #include "exint.h"
+   4          #include "7segment_led.h"
+   5          #include "exint.h"
+   6          #include "timer0.h"
+   7          #include "led.h"
+   8          #include "pwm.h"
+   9          #include "flash.h"
+  10          
+  11          #define MODE_NORMAL      0
+  12          #define MODE_SET_HOUR    1
+  13          #define MODE_SET_MINUTE  2
+  14          #define MODE_SET_ALARM_HOUR 3
+  15          #define MODE_SET_ALARM_MINUTE 4
+  16          
+  17          uint8_t mode = MODE_NORMAL;
+  18          uint8_t hour = 0, minute = 0;
+  19          uint8_t prev_hour = 0, prev_minute = 0;
+  20          uint8_t alarm_hour = 0, alarm_minute = 0;
+  21          bit blink_state = 0;
+  22          bit buzz_flag = 0;
+  23          bit alarm_triggered = 0;
+  24          bit buzzer_on_state = 0;
+  25          unsigned int alarm_buzz_counter = 0;  
+  26          
+  27          
+  28          void delay_ms(uint16_t ms);
+  29          void buzzer_pwm_config();
+  30          void buzzer_off();
+  31          void flash_read_alarm_time(alarm_hour, alarm_minute);
+*** WARNING C235 IN LINE 31 OF Source\main.c: parameter 1: different types
+*** WARNING C235 IN LINE 31 OF Source\main.c: parameter 2: different types
+  32          void flash_save_alarm_time(alarm_hour, alarm_minute);
+*** WARNING C235 IN LINE 32 OF Source\main.c: parameter 1: different types
+*** WARNING C235 IN LINE 32 OF Source\main.c: parameter 2: different types
+  33          
+  34          /***********************************************************
+  35          **Function name   : check_alarm_trigger
+  36          ***********************************************************/
+  37          void check_alarm_trigger() 
+  38          {
+  39   1        if ((alarm_hour!=0 || alarm_minute!=0) && hour == alarm_hour && minute == alarm_minute)
+  40   1        { alarm_triggered = 1; 
+  41   2          alarm_buzz_counter = 0;
+  42   2          buzzer_on_state = 0;
+  43   2        }
+  44   1      }
+  45          /***********************************************************
+  46          **Function name   : update_buzzer_alarm
+  47          ***********************************************************/
+  48          void update_buzzer_alarm()
+C51 COMPILER V9.60.7.0   MAIN                                                              09/06/2025 12:39:12 PAGE 2   
+
+  49          { if (alarm_triggered)
+  50   1        { alarm_buzz_counter++;
+  51   2          if (alarm_buzz_counter <= 10000) // 5s
+  52   2          { if ((alarm_buzz_counter % 500) == 0)
+  53   3            { if(buzzer_on_state) 
+  54   4              { buzzer_off();
+  55   5                buzzer_on_state = 0;
+  56   5              }
+  57   4              else 
+  58   4              { buzzer_pwm_config();
+  59   5                buzzer_on_state = 1;
+  60   5              }
+  61   4            }
+  62   3          }
+  63   2          else
+  64   2          { alarm_triggered = 0;
+  65   3            buzzer_off();
+  66   3            buzzer_on_state = 0;
+  67   3            alarm_buzz_counter = 0;
+  68   3          }
+  69   2        }
+  70   1      }
+  71          /***********************************************************
+  72          **Function name   : main
+  73          ***********************************************************/
+  74          int main(void)
+  75          { 
+  76   1        CKCON   = 0X70;
+  77   1        CLKSEL  = 0X05;               //Fcpu = 32M/4
+  78   1        CLKCMD  = 0X69;               
+  79   1        CKCON   = 0X00;   
+  80   1        int0_config();
+  81   1        segment_led_config();
+  82   1        timer0_config();
+  83   1        led_config();
+  84   1        flash_read_alarm_time(&alarm_hour, &alarm_minute);
+  85   1        while(1)
+  86   1        {
+  87   2          if( minute != prev_minute)
+  88   2          { prev_minute = minute;
+  89   3            check_alarm_trigger();
+  90   3          }
+  91   2          update_buzzer_alarm();
+  92   2          if(buzz_flag) 
+  93   2          { buzzer_pwm_config();
+  94   3            delay_ms(300);
+  95   3            buzzer_off();
+  96   3            buzz_flag = 0;
+  97   3          }
+  98   2          switch(mode)
+  99   2          {
+ 100   3            case 0: segment_display_time(hour, minute);
+ 101   3                    break;
+ 102   3            case 1: if(blink_state) segment_display_hour(hour, minute);
+ 103   3                    else segment_clear_hour();
+ 104   3                    break;
+ 105   3            case 2: if(blink_state) segment_display_minute(hour, minute);
+ 106   3                    else segment_clear_minute();
+ 107   3                    break;
+ 108   3            case 3: if(blink_state) segment_display_hour(alarm_hour, alarm_minute);
+ 109   3                    else segment_clear_hour();
+ 110   3                    if(blink_state) led_ctr(LED0, 0);
+C51 COMPILER V9.60.7.0   MAIN                                                              09/06/2025 12:39:12 PAGE 3   
+
+ 111   3                    else led_ctr(LED0, 1);
+ 112   3                    break;
+ 113   3            case 4: if(blink_state) segment_display_minute(alarm_hour,alarm_minute);
+ 114   3                    else segment_clear_minute();
+ 115   3                    if(blink_state) led_ctr(LED0, 0);
+ 116   3                    else led_ctr(LED0, 1);
+ 117   3                    break;
+ 118   3          }
+ 119   2          WDTR = 0x5A;                //CLR WDTR
+ 120   2          delay_ms(1);
+ 121   2          segment_led_scan();
+ 122   2          segment_display_time(prev_hour, prev_minute);
+ 123   2        }
+ 124   1      }
+ 125          /***********************************************************
+ 126          **Function name   : delay_ms
+ 127          ***********************************************************/
+ 128          void delay_ms(uint16_t ms)
+ 129          {
+ 130   1        uint16_t i,j;
+ 131   1        for(i = 0; i < 100;i++)
+ 132   1        {
+ 133   2          WDTR = 0x5A;
+ 134   2          for(j=0;j<ms;j++);
+ 135   2        }
+ 136   1      }
+ 137            
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    341    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      9    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      4    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  4 WARNING(S),  0 ERROR(S)

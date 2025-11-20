@@ -1,0 +1,185 @@
+C51 COMPILER V9.60.7.0   EXINT                                                             09/06/2025 12:39:12 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE EXINT
+OBJECT MODULE PLACED IN .\Objects\exint.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE Source\exint.c OPTIMIZE(8,SPEED) BROWSE INCDIR(.\Source;.\Source;.\Sourc
+                    -e\Buzzer;.\Source\CHRG;.\Source\KEY;.\Source\Timer;.\Source\IIC;.\Source\USER;.\Source\SYS;.\Source\UART;.\Source\LCD;.\
+                    -Source\LED;.\Source\INC;.\Source\InfraRed;.\Source\ISP;.\Source\WS2811;.\Source\RF;.\Hardware\SN8F5702_Hardware\inc;.\So
+                    -urce\AHT10) DEBUG OBJECTEXTEND PRINT(.\Listings\exint.lst) TABS(2) OBJECT(.\Objects\exint.obj)
+
+line level    source
+
+   1          #include "exint.h"
+   2          #include "7segment_led.h"
+   3          #include "led.h"
+   4          #include " pwm.h"
+   5          #include "flash.h"
+   6          
+   7          
+   8          #define MODE_NORMAL           0
+   9          #define MODE_SET_HOUR         1
+  10          #define MODE_SET_MINUTE       2
+  11          #define MODE_SET_ALARM_HOUR   3
+  12          #define MODE_SET_ALARM_MINUTE 4
+  13          
+  14          #define keyout0   P44                                           //按键接口引脚定义
+  15          #define keyout3   P47
+  16          
+  17          
+  18          #define keyin0    P24
+  19          #define keyin1    P25
+  20          #define keyin3    P27
+  21          
+  22          extern uint8_t mode;
+  23          extern uint8_t prev_hour, prev_minute;
+  24          extern uint8_t hour, minute;
+  25          extern uint8_t alarm_hour, alarm_minute;
+  26          extern bit buzz_flag;
+  27          
+  28          /***********************************************************
+  29          **Function name   :int0_config()
+  30          **
+  31          **Input parameter : 
+  32          **
+  33          **Input parameter :
+  34          **
+  35          **Description     :INT0 is configured to trigger the falling edge
+  36          ***********************************************************/
+  37          void int0_config()
+  38          {
+  39   1        P4  &= 0X0F;
+  40   1        P4M |= 0XF0;
+  41   1        
+  42   1        PEDGE = 0X02;
+  43   1        EX0 = 1;
+  44   1        EAL = 1;
+  45   1      }
+  46          /***********************************************************
+  47          **Function name   :
+  48          **
+  49          **Input parameter : 
+  50          **
+  51          **Input parameter :
+  52          **
+C51 COMPILER V9.60.7.0   EXINT                                                             09/06/2025 12:39:12 PAGE 2   
+
+  53          **Description     :
+  54          ***********************************************************/
+  55          void int0_isr(void) interrupt ISRInt0
+  56          { 
+  57   1        uint8_t i;
+  58   1        PEDGE = 0;
+  59   1        P44 = 0;
+  60   1        P4 |= 0XEF; 
+  61   1        buzz_flag = 1;
+  62   1        
+  63   1        for(i = 0;i<100;i++);
+  64   1        if(P24 == 0) 
+  65   1        {
+  66   2          if(mode == 0)
+  67   2          {
+  68   3            prev_hour = hour;
+  69   3            prev_minute = minute; 
+  70   3            mode=1;
+  71   3          }
+  72   2          else if(mode== 1) 
+  73   2          {mode=2;}
+  74   2          else if(mode == 2)
+  75   2          {mode=0;}
+  76   2        }
+  77   1        for(i=0;i<100;i++);
+  78   1        if(P27 == 0)
+  79   1        {
+  80   2          if(mode == 0) mode = 3;
+  81   2          else if(mode == 3) mode = 4;
+  82   2          else if(mode == 4)
+  83   2          {
+  84   3            flash_save_alarm_time(alarm_hour, alarm_minute);
+  85   3            mode = 0;
+  86   3            led_ctr(LED0,1);
+  87   3          }
+  88   2        }
+  89   1        P44 = 1;
+  90   1      
+  91   1        P47 = 0;
+  92   1        for(i=0;i<100;i++);
+  93   1        if(P24 == 0)
+  94   1        {
+  95   2          if(mode == 1)
+  96   2          {
+  97   3            hour++;
+  98   3            if(hour > 23) 
+  99   3              hour = 0;
+ 100   3          }
+ 101   2          else if(mode == 2)
+ 102   2          {
+ 103   3            minute++;
+ 104   3            if(minute > 59 )
+ 105   3              minute = 0;
+ 106   3          }
+ 107   2          else if(mode == 3)
+ 108   2          {
+ 109   3            
+ 110   3            alarm_hour++;
+ 111   3            if(alarm_hour > 23)
+ 112   3              alarm_hour = 0;
+ 113   3          }
+ 114   2          else if(mode == 4)
+C51 COMPILER V9.60.7.0   EXINT                                                             09/06/2025 12:39:12 PAGE 3   
+
+ 115   2          {
+ 116   3            
+ 117   3            alarm_minute++;
+ 118   3            if(alarm_minute > 59)
+ 119   3              alarm_minute = 0;
+ 120   3          }
+ 121   2          
+ 122   2        }
+ 123   1        for(i=0;i<100;i++);
+ 124   1        if(P25 == 0)
+ 125   1         {
+ 126   2           if(mode == 1)
+ 127   2           {
+ 128   3             if(hour == 0)
+ 129   3              hour = 23;
+ 130   3             else hour--;
+ 131   3           }
+ 132   2           else if(mode == 2)
+ 133   2           {
+ 134   3             if(minute == 0)
+ 135   3             minute = 59;
+ 136   3             else minute--;
+ 137   3           }
+ 138   2           else if(mode == 3)
+ 139   2          {
+ 140   3            if(alarm_hour == 0)
+ 141   3              alarm_hour = 23;   
+ 142   3             else alarm_hour--;  
+ 143   3          }
+ 144   2          else if(mode == 4)
+ 145   2          {
+ 146   3            if(alarm_minute == 0)
+ 147   3              alarm_minute = 59;  
+ 148   3             else alarm_minute--;
+ 149   3          }    
+ 150   2         }
+ 151   1         P47 = 1;
+ 152   1        P4 &= 0x0F;
+ 153   1        PEDGE = 0X02;
+ 154   1      }
+ 155            
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    362    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       1
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
